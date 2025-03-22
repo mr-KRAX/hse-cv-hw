@@ -283,28 +283,6 @@
                     setupHLSPlayer(data.stream_url);
                     resultContainer.style.display = 'block';
 
-                    // В функции processVideoStreaming после setupHLSPlayer
-                // let retries = 0;
-                // const checkSegment = async () => {
-                //     try {
-                //         const response = await fetch(`${streamUrl}?t=${Date.now()}`);
-                //         if (response.ok) {
-                //             const text = await response.text();
-                //             if (text.includes('#EXT-X-ENDLIST')) {
-                //                 console.log('Full playlist loaded');
-                //             } else if (text.includes('segment_0.ts')) {
-                //                 console.log('First segment available');
-                //                 videoPlayer.style.display = 'block';
-                //                 videoPlayer.play();
-                //             } else if (retries++ < 30) {
-                //                 setTimeout(checkSegment, 1000);
-                //             }
-                //         }
-                //     } catch (e) {
-                //         console.error('Segment check error:', e);
-                //     }
-                // };
-                // checkSegment();
                 } else {
                     const errorData = await response.json();
                     alert('Error processing video: ' + errorData.detail);
@@ -324,9 +302,9 @@
                 
                 if (Hls.isSupported()) {
                     const hls = new Hls({
-                        enableWorker: true,  // Используем Web Worker
+                        enableWorker: true,
                         lowLatencyMode: true,
-                        backBufferLength: 0  // Для live-стрима
+                        backBufferLength: 0
                     });                    
                     hls.on(Hls.Events.MEDIA_ATTACHED, () => {
                         console.log('Media attached');
