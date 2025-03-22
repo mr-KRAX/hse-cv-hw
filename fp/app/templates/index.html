@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Person Detection</title>
+    <!-- Include HLS.js library for streaming -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+            line-height: 1.6;
+        }
+        .container {
+            border: 1px solid #eee;
+            border-radius: 5px;
+            padding: 20px;
+            margin-top: 20px;
+            background-color: #f9f9f9;
+        }
+        .result-container {
+            margin-top: 20px;
+            display: none;
+        }
+        #resultImage, #videoPlayer {
+            max-width: 100%;
+            max-height: 500px;
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            display: none;
+        }
+        #loading {
+            display: none;
+            margin: 10px 0;
+            color: #333;
+            font-weight: bold;
+        }
+        #videoProcessingInfo {
+            display: none;
+            margin: 20px 0;
+            padding: 10px;
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+            border-radius: 4px;
+        }
+        #videoStatusMessage {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 10px;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .tab {
+            overflow: hidden;
+            border: 1px solid #ccc;
+            background-color: #f1f1f1;
+            border-radius: 5px 5px 0 0;
+        }
+        .tab button {
+            background-color: inherit;
+            float: left;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            padding: 10px 16px;
+            transition: 0.3s;
+            color: #333;
+            margin: 0;
+        }
+        .tab button:hover {
+            background-color: #ddd;
+        }
+        .tab button.active {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .tabcontent {
+            display: none;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-top: none;
+            border-radius: 0 0 5px 5px;
+            animation: fadeEffect 1s;
+        }
+        @keyframes fadeEffect {
+            from {opacity: 0;}
+            to {opacity: 1;}
+        }
+        .progress-container {
+            width: 100%;
+            margin-top: 10px;
+            display: none;
+        }
+        .progress-bar {
+            width: 0%;
+            height: 20px;
+            background-color: #4CAF50;
+            text-align: center;
+            line-height: 20px;
+            color: white;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Person Detection Service</h1>
+    
+    <div class="tab">
+        <button class="tablinks active" onclick="openTab(event, 'ImageTab')">Image Detection</button>
+        <button class="tablinks" onclick="openTab(event, 'VideoTab')">Video Detection</button>
+    </div>
+    
+    <div id="ImageTab" class="tabcontent" style="display: block;">
+        <h2>Detect People in Images</h2>
+        <div class="container">
+            <input type="file" id="imageInput" accept="image/*">
+            <button onclick="detectPersonsInImage()">Detect</button>
+            <div id="imageLoading" class="loading" style="display: none;">Processing...</div>
+            <div class="result-container" id="imageResultContainer">
+                <h3>Detection Result</h3>
+                <img id="resultImage" alt="Result">
+            </div>
+        </div>
+    </div>
+    
+    <div id="VideoTab" class="tabcontent">
+        <h2>Detect People in Videos (Streaming)</h2>
+        <div class="container">
+            <input type="file" id="videoInput" accept="video/mp4,video/quicktime,video/x-msvideo">
+            <button onclick="processVideoStreaming()" id="processVideoButton">Process Video</button>
+            
+            <div id="videoProcessingInfo">
+                <div id="videoStatusMessage">Initializing video processing...</div>
+                <div class="progress-container" id="videoProgressContainer">
+                    <div class="progress-bar" id="videoProgressBar">0%</div>
+                </div>
+            </div>
+            
+            <div class="result-container" id="videoResultContainer">
+                <h3>Live Processing Stream</h3>
+                
+                <video id="videoPlayer" controls style="width: 100%;"></video>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // Tab handling
+        function openTab(evt, tabName) {
+            var i, tabcontent, tablinks;
+            tabcontent = document.getElementsByClassName("tabcontent");
+            for (i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].style.display = "none";
+            }
+            tablinks = document.getElementsByClassName("tablinks");
+            for (i = 0; i < tablinks.length; i++) {
+                tablinks[i].className = tablinks[i].className.replace(" active", "");
+            }
+            document.getElementById(tabName).style.display = "block";
+            evt.currentTarget.className += " active";
+        }
+        
+        // Image detection
+        async function detectPersonsInImage() {
+            const fileInput = document.getElementById('imageInput');
+            const loading = document.getElementById('imageLoading');
+            const resultImage = document.getElementById('resultImage');
+            const resultContainer = document.getElementById('imageResultContainer');
+            
+            if (!fileInput.files[0]) {
+                alert('Please select an image file');
+                return;
+            }
+            
+            // Create form data
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            
+            // Show loading
+            loading.style.display = 'block';
+            resultImage.style.display = 'none';
+            resultContainer.style.display = 'none';
+            
+            try {
+                // Send request to API
+                const response = await fetch('/detect_people/image', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    // Get image and display it
+                    const blob = await response.blob();
+                    resultImage.src = URL.createObjectURL(blob);
+                    resultImage.style.display = 'block';
+                    resultContainer.style.display = 'block';
+                } else {
+                    const errorData = await response.json();
+                    alert('Error processing image: ' + errorData.detail);
+                }
+            } catch (error) {
+                alert('Error: ' + error);
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+        
+        // Video processing with streaming
+        let statusCheckInterval = null;
+        let videoId = null;
+
+        async function sleep(ms) {
+        await new Promise((resolve) => setTimeout(resolve, ms));
+}
+        
+        async function processVideoStreaming() {
+            const fileInput = document.getElementById('videoInput');
+            const processButton = document.getElementById('processVideoButton');
+            const processingInfo = document.getElementById('videoProcessingInfo');
+            const statusMessage = document.getElementById('videoStatusMessage');
+            const progressContainer = document.getElementById('videoProgressContainer');
+            const progressBar = document.getElementById('videoProgressBar');
+            const videoPlayer = document.getElementById('videoPlayer');
+            const resultContainer = document.getElementById('videoResultContainer');
+            
+            if (!fileInput.files[0]) {
+                alert('Please select a video file');
+                return;
+            }
+            
+            // Create form data
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            
+            // Reset UI
+            processButton.disabled = true;
+            processingInfo.style.display = 'block';
+            statusMessage.textContent = 'Uploading video...';
+            progressContainer.style.display = 'block';
+            progressBar.style.width = '0%';
+            progressBar.textContent = '0%';
+            videoPlayer.style.display = 'none';
+            resultContainer.style.display = 'none';
+            
+            try {
+                // Start video processing
+                const response = await fetch('/detect_people/video-stream', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    videoId = data.video_id;
+                    
+                    // Start checking status
+                    statusMessage.textContent = 'Video processing started. You can view the progress below.';
+                    startStatusCheck(data.status_url);
+
+                    async function sleep(ms) {
+                         await new Promise((resolve) => setTimeout(resolve, ms));
+                    }
+                    await sleep(1000);
+                    
+                    // Setup video player with HLS
+                    setupHLSPlayer(data.stream_url);
+                    resultContainer.style.display = 'block';
+
+                    // В функции processVideoStreaming после setupHLSPlayer
+                // let retries = 0;
+                // const checkSegment = async () => {
+                //     try {
+                //         const response = await fetch(`${streamUrl}?t=${Date.now()}`);
+                //         if (response.ok) {
+                //             const text = await response.text();
+                //             if (text.includes('#EXT-X-ENDLIST')) {
+                //                 console.log('Full playlist loaded');
+                //             } else if (text.includes('segment_0.ts')) {
+                //                 console.log('First segment available');
+                //                 videoPlayer.style.display = 'block';
+                //                 videoPlayer.play();
+                //             } else if (retries++ < 30) {
+                //                 setTimeout(checkSegment, 1000);
+                //             }
+                //         }
+                //     } catch (e) {
+                //         console.error('Segment check error:', e);
+                //     }
+                // };
+                // checkSegment();
+                } else {
+                    const errorData = await response.json();
+                    alert('Error processing video: ' + errorData.detail);
+                    processingInfo.style.display = 'none';
+                    processButton.disabled = false;
+                }
+            } catch (error) {
+                alert('Error: ' + error);
+                processingInfo.style.display = 'none';
+                processButton.disabled = false;
+            }
+        }
+        
+        function setupHLSPlayer(streamUrl) {
+                const video = document.getElementById('videoPlayer');
+                video.style.display = 'block';
+                
+                if (Hls.isSupported()) {
+                    const hls = new Hls({
+                        enableWorker: true,  // Используем Web Worker
+                        lowLatencyMode: true,
+                        backBufferLength: 0  // Для live-стрима
+                    });                    
+                    hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+                        console.log('Media attached');
+                        hls.loadSource(streamUrl);
+                    });
+                    
+                    hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
+                        console.log('Manifest loaded, found', data.levels.length, 'quality levels');
+                        video.play().catch(e => console.log('Autoplay error:', e));
+                    });                   
+                     hls.attachMedia(video);
+                    
+                    // Handle errors
+                    hls.on(Hls.Events.ERROR, function(event, data) {
+                        if (data.fatal) {
+                            switch(data.type) {
+                                case Hls.ErrorTypes.NETWORK_ERROR:
+                                    // Try to recover network error
+                                    console.log('Fatal network error encountered, trying to recover');
+                                    hls.startLoad();
+                                    break;
+                                case Hls.ErrorTypes.MEDIA_ERROR:
+                                    console.log('Fatal media error encountered, trying to recover');
+                                    console.log(data)
+                                    hls.recoverMediaError();
+                                    break;
+                                default:
+                                    // Cannot recover
+                                    console.log('Fatal error, cannot recover');
+                                    hls.destroy();
+                                    break;
+                            }
+                        }
+                    });
+                }
+                else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                    // Native HLS support (Safari)
+                    video.src = streamUrl;
+                    video.addEventListener('loadedmetadata', function() {
+                        video.play();
+                    });
+                } else {
+                    alert("Your browser doesn't support HLS streaming.");
+                }
+            }        
+        function startStatusCheck(statusUrl) {
+            // Clear any existing interval
+            if (statusCheckInterval) {
+                clearInterval(statusCheckInterval);
+            }
+            
+            const statusMessage = document.getElementById('videoStatusMessage');
+            const progressBar = document.getElementById('videoProgressBar');
+            const processButton = document.getElementById('processVideoButton');
+            
+            // Start periodic status checking
+            statusCheckInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(statusUrl);
+                    if (response.ok) {
+                        const status = await response.json();
+                        
+                        // Update progress bar
+                        if (status.progress !== undefined) {
+                            progressBar.style.width = `${status.progress}%`;
+                            progressBar.textContent = `${status.progress.toFixed(1)}%`;
+                        }
+                        
+                        // Update status message
+                        if (status.message) {
+                            statusMessage.textContent = status.message;
+                        }
+                        
+                        // Check if processing is complete or has error
+                        if (status.status === 'completed') {
+                            statusMessage.textContent = 'Video processing completed! You can now watch the full video.';
+                            clearInterval(statusCheckInterval);
+                            processButton.disabled = false;
+                        } else if (status.status === 'error') {
+                            statusMessage.textContent = `Error: ${status.message}`;
+                            clearInterval(statusCheckInterval);
+                            processButton.disabled = false;
+                        }
+                    } else {
+                        console.error('Status check failed');
+                    }
+                } catch (error) {
+                    console.error('Error checking status:', error);
+                }
+            }, 1000);  // Check every second
+        }
+    </script>
+</body>
+</html>
